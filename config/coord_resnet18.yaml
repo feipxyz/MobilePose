@@ -1,0 +1,35 @@
+
+MODEL:
+  PRETRAIN_PATH: "/home/tudou/Github/MobilePose/models/resnet18_320_adam_best.t7"
+  BACKBONE: 
+    NAME: "resnet18"
+
+DATALOADER:
+  NUM_WORKERS: 4
+  SHUFFLE: true
+  TRAIN_BATCH_SIZE: 32
+  TEST_BATCH_SIZE: 32
+
+DATASET:
+  ROOT: "./data"
+  INPUT_SIZE: 320
+  TRAIN_LABEL_FILE: "opt-light-train.txt"
+  TEST_LABEL_FILE: "opt-light-test.txt"
+
+SOLVER:
+  LR: 0.001
+  LR_SCHEDULER_NAME: "StepLR"
+  GAMMA: 0.5
+  STEP_SIZE: 80
+
+TASK:
+  NAME: "opt-phone"
+  ROOT: "experiment"
+  COORD_NUM: 8
+  EPOCH: 200
+  LOG_DIR: "log"
+  WEIGHT_DIR: "weight"
+
+DEVICE: "cuda:0"
+
+

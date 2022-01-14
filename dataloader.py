@@ -44,38 +44,50 @@ def display_pose( img, pose, ids):
     std=np.array([0.229, 0.224, 0.225])
     pose  = pose.data.cpu().numpy()
     img = img.cpu().numpy().transpose(1,2,0)
-    colors = ['g', 'g', 'g', 'g', 'g', 'g', 'm', 'm', 'r', 'r', 'y', 'y', 'y', 'y','y','y']
+    # colors = ['g', 'g', 'g', 'g', 'g', 'g', 'm', 'm', 'r', 'r', 'y', 'y', 'y', 'y','y','y']
+    colors = ['g', 'g', 'm', 'm', 'r', 'r', 'y', 'y']
     pairs = [[8,9],[11,12],[11,10],[2,1],[1,0],[13,14],[14,15],[3,4],[4,5],[8,7],[7,6],[6,2],[6,3],[8,12],[8,13]]
     colors_skeleton = ['r', 'y', 'y', 'g', 'g', 'y', 'y', 'g', 'g', 'm', 'm', 'g', 'g', 'y','y']
     img = np.clip(img*std+mean, 0.0, 1.0)
     img_width, img_height,_ = img.shape
     pose = ((pose + 1)* np.array([img_width, img_height])-1)/2 # pose ~ [-1,1]
+    img = img * 255
+    img = img.astype(np.uint8)
+    img = img.copy()
 
-    plt.subplot(25,4,ids+1)
-    ax = plt.gca()
-    plt.imshow(img)
-    for idx in range(len(colors)):
-        plt.plot(pose[idx,0], pose[idx,1], marker='o', color=colors[idx])
-    for idx in range(len(colors_skeleton)):
-        plt.plot(pose[pairs[idx],0], pose[pairs[idx],1],color=colors_skeleton[idx])
+    for ps in pose:
+        cv2.circle(img, tuple(ps.astype(np.int32).tolist()), 2, (0,0,255))
+    return img
 
-    xmin = np.min(pose[:,0])
-    ymin = np.min(pose[:,1])
-    xmax = np.max(pose[:,0])
-    ymax = np.max(pose[:,1])
+    # plt.subplot(25,4,ids+1)
+    # ax = plt.gca()
+    # plt.imshow(img)
+    # for idx in range(len(colors)):
+    #     plt.plot(pose[idx,0], pose[idx,1], marker='o', color=colors[idx])
+    # for idx in range(len(colors_skeleton)):
+    #     plt.plot(pose[pairs[idx],0], pose[pairs[idx],1],color=colors_skeleton[idx])
 
-    bndbox = np.array(expand_bbox(xmin, xmax, ymin, ymax, img_width, img_height))
-    coords = (bndbox[0], bndbox[1]), bndbox[2]-bndbox[0]+1, bndbox[3]-bndbox[1]+1
-    ax.add_patch(plt.Rectangle(*coords, fill=False, edgecolor='yellow', linewidth=1))
+    # xmin = np.min(pose[:,0])
+    # ymin = np.min(pose[:,1])
+    # xmax = np.max(pose[:,0])
+    # ymax = np.max(pose[:,1])
+
+    # bndbox = np.array(expand_bbox(xmin, xmax, ymin, ymax, img_width, img_height))
+    # coords = (bndbox[0], bndbox[1]), bndbox[2]-bndbox[0]+1, bndbox[3]-bndbox[1]+1
+    # ax.add_patch(plt.Rectangle(*coords, fill=False, edgecolor='yellow', linewidth=1))
 
 def expand_bbox(left, right, top, bottom, img_width, img_height):
     width = right-left
     height = bottom-top
-    ratio = 0.15
-    new_left = np.clip(left-ratio*width,0,img_width)
-    new_right = np.clip(right+ratio*width,0,img_width)
-    new_top = np.clip(top-ratio*height,0,img_height)
-    new_bottom = np.clip(bottom+ratio*height,0,img_height)
+    ratio_l = random.uniform(0.15, 0.3)
+    ratio_r = random.uniform(0.15, 0.3)
+    ratio_t = random.uniform(0.15, 0.3)
+    ratio_b = random.uniform(0.15, 0.3)
+    new_left = np.clip(left-ratio_l*width,0,img_width)
+    new_right = np.clip(right+ratio_r*width,0,img_width)
+    new_top = np.clip(top-ratio_t*height,0,img_height)
+    new_bottom = np.clip(bottom+ratio_b*height,0,img_height)
+
 
     return [int(new_left), int(new_top), int(new_right), int(new_bottom)]
 
@@ -191,8 +203,8 @@ class PoseDataset(Dataset):
         
     def __getitem__(self, idx):
         line = self.f_csv[idx][0].split(",")
-        img_path = os.path.join(self.root,'images',line[0])
-        image = io.imread(img_path)
+        img_path = line[0]
+        image = cv2.imread(img_path)
         height, width = image.shape[0], image.shape[1]
         pose = np.array([float(item) for item in line[1:]]).reshape([-1,2])
         
@@ -203,6 +215,8 @@ class PoseDataset(Dataset):
 
         box = expand_bbox(xmin, xmax, ymin, ymax, width, height)
         image = image[box[1]:box[3],box[0]:box[2],:]
+        if image.shape[0] == 0 or image.shape[1] == 0:
+            print(img_path)
         pose = (pose-np.array([box[0],box[1]])).flatten()
         sample = {'image': image, 'pose':pose}
         if self.transform:
@@ -238,32 +252,33 @@ class Augmentation(object):
     def __call__(self, sample):
         image, pose= sample['image'], sample['pose'].reshape([-1,2])
 
-        sometimes = lambda aug: iaa.Sometimes(0.3, aug)
+        # sometimes = lambda aug: iaa.Sometimes(0.3, aug)
+        sometimes = lambda aug, p=0.3 : iaa.Sometimes(p, aug)
 
         seq = iaa.Sequential(
             [
                 # Apply the following augmenters to most images.
 
-                sometimes(iaa.CropAndPad(percent=(-0.25, 0.25), pad_mode=["edge"], keep_size=False)),
+                sometimes(iaa.CropAndPad(percent=(-0.05, 0.05), pad_mode=["constant"], pad_cval=(0,10), keep_size=False)),
 
                 sometimes(iaa.Affine(
-                    scale={"x": (0.75, 1.25), "y": (0.75, 1.25)},
-                    translate_percent={"x": (-0.25, 0.25), "y": (-0.25, 0.25)},
-                    rotate=(-45, 45),
-                    shear=(-5, 5),
+                    scale={"x": (0.95, 1.05), "y": (0.95, 1.05)},
+                    translate_percent={"x": (-0.05, 0.05), "y": (-0.05, 0.05)},
+                    rotate=(-3, 3),
+                    shear=(-2, 2),
                     order=[0, 1],
-                    cval=(0, 255),
-                    mode=ia.ALL
-                )),
+                    cval=(0, 10),
+                    mode=['constant']
+                ), 0.5),
 
                 iaa.SomeOf((0, 3),
                     [
         
                         iaa.OneOf([
-                            iaa.GaussianBlur((0, 3.0)),
+                            iaa.GaussianBlur((0, 1.0)),
                             # iaa.AverageBlur(k=(2, 7)),
-                            iaa.MedianBlur(k=(3, 11)),
-                            iaa.MotionBlur(k=5,angle=[-45, 45])
+                            iaa.MedianBlur(k=(1, 3)),
+                            # iaa.MotionBlur(k=5,angle=[-45, 45])
                         ]),
 
                         iaa.OneOf([
@@ -272,9 +287,9 @@ class Augmentation(object):
                         ]),
 
                         iaa.OneOf([
-                            iaa.Add((-10, 10), per_channel=0.5),
-                            iaa.Multiply((0.2, 1.2), per_channel=0.5),
-                            iaa.ContrastNormalization((0.5, 2.0), per_channel=0.5),
+                            iaa.Add((-10, 5), per_channel=0.5),
+                            iaa.Multiply((0.5, 1.0), per_channel=0.5),
+                            # iaa.ContrastNormalization((0.5, 2.0), per_channel=0.5),
                         ]),
                     ],
                     # do all of the above augmentations in random order

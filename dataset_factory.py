@@ -15,11 +15,7 @@ from dataloader import Rescale, Wrap, PoseDataset, ToTensor, Augmentation, Expan
 from torchvision import datasets, transforms, utils, models
 import os
 
-ROOT_DIR = "./pose_dataset/mpii"  # root dir to the dataset
-
-DEBUG_MODE = False
-
-def get_transform(modeltype, input_size):
+def get_transform(input_size):
     """
     :param modeltype: "resnet" / "mobilenet"
     :param input_size:
@@ -33,7 +29,7 @@ class DatasetFactory:
         pass
 
     @staticmethod
-    def get_train_dataset(modeltype, input_size, debug=DEBUG_MODE):
+    def get_train_dataset(cfg):
         """
         :param modeltype: "resnet" / "mobilenet"
         :return: type: PoseDataset
@@ -41,20 +37,17 @@ class DatasetFactory:
         DataFactory.get_train_dataset("resnet", 224)
         In debug mode, it will return a small dataset
         """
-        csv_name = "train_joints.csv"
-        if debug:
-            csv_name = "train_joints-500.csv"
-
-        return PoseDataset(csv_file=os.path.join(ROOT_DIR, csv_name),
-                           transform=transforms.Compose([
-                               Augmentation(),
-                               get_transform(modeltype, input_size),
-                            #    Expansion(),
-                               ToTensor()
-                           ]))
+        return PoseDataset(
+            csv_file= os.path.join(cfg.DATASET.ROOT, cfg.DATASET.TRAIN_LABEL_FILE),
+            transform=transforms.Compose([
+                Augmentation(),
+                get_transform(cfg.DATASET.INPUT_SIZE),
+            #    Expansion(),
+                ToTensor()
+            ]))
 
     @staticmethod
-    def get_test_dataset(modeltype, input_size, debug=DEBUG_MODE):
+    def get_test_dataset(cfg):
         """
         :param modeltype: resnet / mobilenet
         :return: type: PoseDataset
@@ -62,13 +55,10 @@ class DatasetFactory:
         DataFactory.get_test_dataset("resnet", 224)
         In debug mode, it will return a small dataset
         """
-        csv_name = "test_joints.csv"
-        if debug:
-            csv_name = "test_joints-500.csv"
         return PoseDataset(
-            csv_file=os.path.join(ROOT_DIR, csv_name),
+            csv_file= os.path.join(cfg.DATASET.ROOT, cfg.DATASET.TEST_LABEL_FILE),
             transform=transforms.Compose([
-                get_transform(modeltype, input_size),
+                get_transform(cfg.DATASET.INPUT_SIZE),
                 # Expansion(),
                 ToTensor()
             ]))
